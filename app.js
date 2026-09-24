@@ -270,6 +270,33 @@ function computeNeighborhoodStats() {
 
 // ---- overlay rendering ----
 
+function bandIndex(t) {
+  for (let i = 0; i < BANDS.length; i++) if (t <= BANDS[i].max) return i;
+  return -1;
+}
+
+// value view: intensity = rent tercile WITHIN each commute band.
+// full brightness = cheap for how close it is (the spatial Pareto read).
+const VALUE_SCALE = [1.0, 0.62, 0.34];
+
+function computeBandTerciles() {
+  const commute = state.grid, rent = state.rentGrid;
+  if (!commute || !rent) return null;
+  const byBand = BANDS.map(() => []);
+  for (let i = 0; i < commute.length; i++) {
+    const t = commute[i];
+    const v = rent[i];
+    if (t === Infinity || Number.isNaN(v)) continue;
+    const b = bandIndex(t);
+    if (b >= 0) byBand[b].push(v);
+  }
+  return byBand.map(arr => {
+    if (arr.length < 6) return null;
+    arr.sort((a, b) => a - b);
+    return [arr[Math.floor(arr.length / 3)], arr[Math.floor(2 * arr.length / 3)]];
+  });
+}
+
 function renderIso() {
   const canvas = document.createElement('canvas');
   canvas.width = GRID.cols;
@@ -280,21 +307,40 @@ function renderIso() {
   const commute = state.grid;
   const rent = state.rentGrid;
   const mode = state.mode;
+  const terciles = mode === 'value' ? computeBandTerciles() : null;
   for (let r = 0; r < GRID.rows; r++) {
     const gr = GRID.rows - 1 - r; // canvas row 0 = top = max lat
     for (let c = 0; c < GRID.cols; c++) {
       const gi = gr * GRID.cols + c;
       let col = null;
+      let alpha = ISO_ALPHA;
       if (mode === 'commute') {
         const t = commute ? commute[gi] : Infinity;
         if (t !== Infinity) col = bandColor(t);
-      } else {
+      } else if (mode === 'rent') {
         const v = rent ? rent[gi] : NaN;
         if (!Number.isNaN(v)) col = rentColor(v);
+      } else {
+        const t = commute ? commute[gi] : Infinity;
+        if (t !== Infinity) {
+          const b = bandIndex(t);
+          const base = BANDS[b].color;
+          const v = rent ? rent[gi] : NaN;
+          const tc = terciles && terciles[b];
+          if (!Number.isNaN(v) && tc) {
+            const k = v <= tc[0] ? 0 : v <= tc[1] ? 1 : 2;
+            const s = VALUE_SCALE[k];
+            col = [base[0] * s, base[1] * s, base[2] * s];
+          } else {
+            // commute known, rent unknown: ghost the band so shape survives
+            col = base;
+            alpha = 55;
+          }
+        }
       }
       if (!col) continue;
       const o = (r * GRID.cols + c) * 4;
-      px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; px[o + 3] = ISO_ALPHA;
+      px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; px[o + 3] = alpha;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -311,6 +357,18 @@ function renderIso() {
 
 function renderLegend() {
   const el = document.getElementById('legend');
+  if (state.mode === 'value') {
+    const cols = BANDS.map((b, i) => {
+      const cells = VALUE_SCALE.map(s =>
+        `<i style="background:rgb(${Math.round(b.color[0]*s)},${Math.round(b.color[1]*s)},${Math.round(b.color[2]*s)})"></i>`
+      ).join('');
+      const lab = i === 0 ? '&le;20' : i === BANDS.length - 1 ? '65+' : `${BANDS[i - 1].max}&ndash;${b.max}`;
+      return `<div class="v-col">${cells}<span>${lab}</span></div>`;
+    }).join('');
+    el.innerHTML = `<div class="v-grid"><div class="v-axis"><span>cheap</span><span>for the band</span><span>pricey</span></div>${cols}</div>
+      <div class="v-note">bright = best value at that commute · faint = no listing data · min</div>`;
+    return;
+  }
   if (state.mode === 'commute') {
     el.innerHTML = BANDS.map((b, i) => {
       const lab = i === 0 ? '&le;20' : i === BANDS.length - 1 ? '65+ min'
@@ -541,11 +599,13 @@ function renderScatter() {
       data-name="${s.nb.name}" data-lat="${s.nb.lat}" data-lon="${s.nb.lon}"
       data-lab="${s.nb.name} — ${fmtK(s.median)}, ~${Math.round(s.commute)} min (${s.n} listings)"/>`;
   }
-  // direct labels for frontier points (cap at 7)
-  for (const s of pareto.slice(0, 7)) {
-    const yOff = Y(s.median) < mT + 14 ? 12 : -7;
-    g += `<text x="${X(s.commute) + 4}" y="${Y(s.median) + yOff}" class="sc-lab">${s.nb.name}</text>`;
-  }
+  // direct labels for frontier points (cap at 7), minutes kept, staggered to avoid pileups
+  pareto.slice(0, 7).forEach((s, i) => {
+    let yOff = i % 2 ? 13 : -7;
+    if (Y(s.median) < mT + 14) yOff = 13;
+    if (Y(s.median) > svgH - mB - 14) yOff = -7;
+    g += `<text x="${X(s.commute) + 4}" y="${Y(s.median) + yOff}" class="sc-lab">${s.nb.name} · ${Math.round(s.commute)}m</text>`;
+  });
   host.querySelector('.scatter-body').innerHTML =
     `<svg viewBox="0 0 ${svgW} ${svgH}" width="100%">${g}</svg><div class="sc-tip" id="sc-tip"></div>`;
 
@@ -559,6 +619,42 @@ function renderScatter() {
   }
 }
 
+// ---- combined source: StreetEasy + Craigslist, de-duplicated ----
+
+const DUP_RADIUS_M = 150; // CL pins are fuzzy; same price+beds within this = same unit
+
+function mergeSources(se, cl) {
+  const byKey = new Map();
+  for (const r of se.listings) {
+    const k = r[2] + '|' + r[3];
+    let arr = byKey.get(k);
+    if (!arr) byKey.set(k, arr = []);
+    arr.push(r);
+  }
+  const extra = [];
+  let dups = 0;
+  for (const r of cl.listings) {
+    const twin = (byKey.get(r[2] + '|' + r[3]) || []).some(s => {
+      const dx = (s[1] - r[1]) * M_PER_LON, dy = (s[0] - r[0]) * M_PER_LAT;
+      return dx * dx + dy * dy <= DUP_RADIUS_M * DUP_RADIUS_M;
+    });
+    if (twin) dups++; else extra.push(r);
+  }
+  // a filter is only honest if every source carries that bit — otherwise
+  // checking it silently drops the whole source that lacks it
+  const has = (src, bit) => src.listings.some(r => r[4] & bit);
+  const availBits = {};
+  for (const [name, bit] of Object.entries(se.flagBits)) {
+    availBits[name] = cl.flagBits[name] === bit && has(se, bit) && has(cl, bit);
+  }
+  const listings = se.listings.concat(extra);
+  return {
+    flagBits: se.flagBits, availBits, listings, count: listings.length,
+    source: `streeteasy + craigslist (${dups.toLocaleString()} dupes merged)`,
+    asOf: se.asOf,
+  };
+}
+
 // ---- wire-up ----
 
 function setSource(name) {
@@ -566,7 +662,7 @@ function setSource(name) {
   if (!src) return;
   state.listings = src;
   localStorage.setItem('commute-map-source', name);
-  for (const n of ['streeteasy', 'craigslist']) {
+  for (const n of ['both', 'streeteasy', 'craigslist']) {
     const btn = document.getElementById('src-' + n);
     if (btn) btn.classList.toggle('active', n === name);
   }
@@ -580,12 +676,13 @@ function setSource(name) {
   let anyAvail = false;
   for (const el of document.querySelectorAll('.f-amen')) {
     const bit = bits[el.dataset.bit] || 0;
-    const avail = bit !== 0 && src.listings.some(r => r[4] & bit);
+    const avail = src.availBits ? !!src.availBits[el.dataset.bit]
+      : bit !== 0 && src.listings.some(r => r[4] & bit);
     anyAvail = anyAvail || avail;
     el.disabled = !avail;
     if (!avail) el.checked = false;
     el.closest('label').classList.toggle('unavailable', !avail);
-    el.closest('label').title = avail ? '' : 'not available from this source';
+    el.closest('label').title = avail ? '' : (src.availBits ? 'only one source has this' : 'not available from this source');
   }
   document.getElementById('src-note').textContent = anyAvail ? '' : 'no amenity data';
   applyFilter();
@@ -593,8 +690,9 @@ function setSource(name) {
 
 function setMode(mode) {
   state.mode = mode;
-  document.getElementById('mode-commute').classList.toggle('active', mode === 'commute');
-  document.getElementById('mode-rent').classList.toggle('active', mode === 'rent');
+  for (const m of ['commute', 'rent', 'value']) {
+    document.getElementById('mode-' + m).classList.toggle('active', mode === m);
+  }
   renderIso();
   renderLegend();
 }
@@ -617,12 +715,35 @@ async function init() {
   if (state.n !== stations.length) throw new Error('matrix/stations mismatch');
   if (se) state.sources.streeteasy = se;
   if (cl || legacy) state.sources.craigslist = cl || legacy;
-  const listings = se || cl || legacy;
+  if (se && state.sources.craigslist) state.sources.both = mergeSources(se, state.sources.craigslist);
+  const listings = state.sources.both || se || cl || legacy;
   state.listings = listings;
 
   buildLines(lines);
   buildStations();
   buildRents(rents);
+
+  // station-name search -> set office there
+  const dl = document.getElementById('station-list');
+  const names = new Map();
+  for (const s of stations) {
+    const label = `${s.name} (${s.routes.join('·')})`;
+    if (!names.has(label)) {
+      names.set(label, s);
+      const opt = document.createElement('option');
+      opt.value = label;
+      dl.appendChild(opt);
+    }
+  }
+  const searchEl = document.getElementById('station-search');
+  searchEl.addEventListener('change', () => {
+    const s = names.get(searchEl.value);
+    if (s) {
+      setOrigin(L.latLng(s.lat, s.lon), `near ${s.name}`);
+      map.setView([s.lat, s.lon], Math.max(map.getZoom(), 13));
+      searchEl.blur();
+    }
+  });
 
   let origin = DEFAULT_ORIGIN;
   const hash = location.hash.match(/^#(-?[\d.]+),(-?[\d.]+)$/);
@@ -639,20 +760,29 @@ async function init() {
       document.getElementById('src-row').style.display = '';
       document.getElementById('src-streeteasy').addEventListener('click', () => setSource('streeteasy'));
       document.getElementById('src-craigslist').addEventListener('click', () => setSource('craigslist'));
+      document.getElementById('src-both').addEventListener('click', () => setSource('both'));
     }
   } else {
     document.getElementById('mode-rent').disabled = true;
+    document.getElementById('mode-value').disabled = true;
     document.getElementById('scatter').style.display = 'none';
   }
 
   setOrigin(L.latLng(origin[0], origin[1]));
   if (listings) {
     const savedSrc = localStorage.getItem('commute-map-source');
-    setSource(state.sources[savedSrc] ? savedSrc : (state.sources.streeteasy ? 'streeteasy' : 'craigslist'));
+    setSource(state.sources[savedSrc] ? savedSrc : state.sources.both ? 'both' : (state.sources.streeteasy ? 'streeteasy' : 'craigslist'));
   }
   renderLegend();
 
   map.on('click', (e) => setOrigin(e.latlng));
+
+  // small screens: panel starts compact (title + mode + legend); tap title for the rest
+  const panel = document.getElementById('panel');
+  if (matchMedia('(max-width: 600px)').matches) panel.classList.add('compact');
+  document.querySelector('.panel-title').addEventListener('click', () => {
+    if (matchMedia('(max-width: 600px)').matches) panel.classList.toggle('compact');
+  });
 
   map.on('mousemove', (e) => {
     const t = timeAt(e.latlng);
@@ -665,6 +795,7 @@ async function init() {
 
   document.getElementById('mode-commute').addEventListener('click', () => setMode('commute'));
   document.getElementById('mode-rent').addEventListener('click', () => setMode('rent'));
+  document.getElementById('mode-value').addEventListener('click', () => setMode('value'));
 
   document.getElementById('toggle-rents').addEventListener('change', (e) => {
     e.target.checked ? state.rentLayer.addTo(map) : map.removeLayer(state.rentLayer);

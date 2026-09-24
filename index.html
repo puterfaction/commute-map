@@ -14,10 +14,13 @@
 <div id="panel">
   <div class="panel-title">Commute from <span id="origin-name">the office</span></div>
   <div class="panel-sub">door-to-door: walk + subway (weekday schedule) · <b>click the map to move the office</b></div>
+  <input id="station-search" list="station-list" placeholder="or type a station to set the office…" autocomplete="off">
+  <datalist id="station-list"></datalist>
 
   <div class="panel-row mode-row">
     <button id="mode-commute" class="mode-btn active">commute</button>
     <button id="mode-rent" class="mode-btn">rent</button>
+    <button id="mode-value" class="mode-btn">value</button>
     <span id="cursor-time">&nbsp;</span>
   </div>
 
@@ -26,6 +29,7 @@
   <div id="filters" style="display:none">
     <div class="f-row" id="src-row" style="display:none">
       <span class="src-label">source</span>
+      <button id="src-both" class="mode-btn src-btn">both</button>
       <button id="src-streeteasy" class="mode-btn src-btn">streeteasy</button>
       <button id="src-craigslist" class="mode-btn src-btn">craigslist</button>
       <span id="src-note" class="f-count"></span>
