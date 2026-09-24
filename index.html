@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Commute × Rent — NYC</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="map"></div>
+
+<div id="panel">
+  <div class="panel-title">Commute from <span id="origin-name">the office</span></div>
+  <div class="panel-sub">door-to-door: walk + subway (weekday schedule) · <b>click the map to move the office</b></div>
+
+  <div class="panel-row mode-row">
+    <button id="mode-commute" class="mode-btn active">commute</button>
+    <button id="mode-rent" class="mode-btn">rent</button>
+    <span id="cursor-time">&nbsp;</span>
+  </div>
+
+  <div id="legend"></div>
+
+  <div id="filters" style="display:none">
+    <div class="f-row" id="src-row" style="display:none">
+      <span class="src-label">source</span>
+      <button id="src-streeteasy" class="mode-btn src-btn">streeteasy</button>
+      <button id="src-craigslist" class="mode-btn src-btn">craigslist</button>
+      <span id="src-note" class="f-count"></span>
+    </div>
+    <div class="f-row">
+      <select id="f-br">
+        <option value="any">any beds</option>
+        <option value="0">studio</option>
+        <option value="1">1 br</option>
+        <option value="2">2 br</option>
+        <option value="3">3+ br</option>
+      </select>
+      <span id="f-count" class="f-count"></span>
+    </div>
+    <div class="f-row f-amens">
+      <label><input type="checkbox" class="f-amen" data-bit="wd"> w/d in unit</label>
+      <label><input type="checkbox" class="f-amen" data-bit="laundry"> laundry in bldg</label>
+      <label><input type="checkbox" class="f-amen" data-bit="balcony"> balcony</label>
+      <label><input type="checkbox" class="f-amen" data-bit="ac"> A/C</label>
+      <label><input type="checkbox" class="f-amen" data-bit="dishwasher"> dishwasher</label>
+      <label><input type="checkbox" class="f-amen" data-bit="doorman"> doorman</label>
+      <label><input type="checkbox" class="f-amen" data-bit="gym"> gym</label>
+      <label><input type="checkbox" class="f-amen" data-bit="cats"> cats</label>
+      <label><input type="checkbox" class="f-amen" data-bit="dogs"> dogs</label>
+      <label><input type="checkbox" class="f-amen" data-bit="nofee"> no fee</label>
+    </div>
+  </div>
+
+  <div class="panel-row toggles">
+    <label><input type="checkbox" id="toggle-rents" checked> labels</label>
+    <label><input type="checkbox" id="toggle-lines" checked> lines</label>
+    <label><input type="checkbox" id="toggle-iso" checked> overlay</label>
+  </div>
+  <div class="panel-note" id="data-src"></div>
+</div>
+
+<div id="scatter" class="collapsed">
+  <div id="scatter-head">rent vs commute <span class="hint">— dots are neighborhoods; the line is the Pareto frontier (cheapest at that commute). click to open</span></div>
+  <div class="scatter-body"></div>
+</div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
