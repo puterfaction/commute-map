@@ -24,9 +24,11 @@ jobs:
       - name: publish
         run: |
           mv /tmp/new.json data/listings-craigslist.json
+          mkdir -p archive/craigslist
+          cp data/listings-craigslist.json "archive/craigslist/$(python3 -c "import json;print(json.load(open('data/listings-craigslist.json'))['asOf'])").json"
           git config user.name "commute-map bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/listings-craigslist.json
+          git add data/listings-craigslist.json archive/craigslist
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
           git commit -m "craigslist refresh $(date -u +%F)"
           git push

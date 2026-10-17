@@ -22,3 +22,10 @@ Craigslist refreshes itself monthly via a GitHub Action
 
 Rent data is a point-in-time snapshot; listings have turned over since.
 Built by [@puterfaction](https://x.com/puterfaction) with Claude.
+
+
+## Data snapshots
+
+Every refresh keeps a dated copy in `archive/<source>/YYYY-MM-DD.json`.
+Roll back with `pipeline/restore_snapshot.sh <streeteasy|craigslist> <date>`
+(no date = list what's available).
