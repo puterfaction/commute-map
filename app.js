@@ -651,8 +651,16 @@ function mergeSources(se, cl) {
   return {
     flagBits: se.flagBits, availBits, listings, count: listings.length,
     source: `streeteasy + craigslist (${dups.toLocaleString()} dupes merged)`,
-    asOf: se.asOf,
+    // each source refreshes on its own schedule, so show both dates
+    asOf: `SE ${monthOf(se.asOf)} · CL ${monthOf(cl.asOf)}`,
   };
+}
+
+// "2026-07-31" -> "Jul 2026"
+function monthOf(iso) {
+  const [y, m] = (iso || '').split('-').map(Number);
+  if (!y || !m) return iso || '?';
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'short', year: 'numeric' });
 }
 
 // ---- wire-up ----

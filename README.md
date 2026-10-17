@@ -5,7 +5,9 @@
 Click anywhere to put your office there. The map redraws door-to-door commute
 times (walk + subway, weekday schedule) from that point across the whole city,
 and overlays real listing-level rents — 22,940 listings from StreetEasy and
-Craigslist combined (duplicates merged), snapshot of late July 2026.
+Craigslist combined (duplicates merged). StreetEasy is a late-July 2026 snapshot;
+Craigslist refreshes itself monthly via a GitHub Action
+(`.github/workflows/refresh-craigslist.yml`).
 
 - Commute times: MTA subway GTFS → all-pairs station matrix (496×496),
   final walking legs computed in your browser, so moving the office is instant.
