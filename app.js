@@ -772,6 +772,7 @@ async function init() {
   if (listings) {
     const savedSrc = localStorage.getItem('commute-map-source');
     setSource(state.sources[savedSrc] ? savedSrc : state.sources.both ? 'both' : (state.sources.streeteasy ? 'streeteasy' : 'craigslist'));
+    setMode('value');
   }
   renderLegend();
 
