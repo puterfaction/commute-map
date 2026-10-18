@@ -652,8 +652,16 @@ function mergeSources(se, cl) {
     flagBits: se.flagBits, availBits, listings, count: listings.length,
     source: `streeteasy + craigslist (${dups.toLocaleString()} dupes merged)`,
     // each source refreshes on its own schedule, so show both dates
-    asOf: `SE ${monthOf(se.asOf)} · CL ${monthOf(cl.asOf)}`,
+    asOf: `SE ${seWhen(se)} · CL ${monthOf(cl.asOf)}`,
   };
+}
+
+// mid-refresh, StreetEasy is fresh for some boroughs only: say which
+function seWhen(se) {
+  const fresh = se.freshAreas || [];
+  if (!se.freshAsOf || !fresh.length || fresh.length >= 5) return monthOf(se.asOf);
+  const names = fresh.map(a => a.replace('-', ' ')).join(', ');
+  return `${monthOf(se.freshAsOf)} (${names}), rest ${monthOf(se.asOf)}`;
 }
 
 // "2026-07-31" -> "Jul 2026"
